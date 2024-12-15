@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block style %}
+<style> 
+    .register { 
+        text-align: center;
+    }
+</style>
+{% endblock %}
+{% block app_content %}
+<div class="register"> 
+    <h1>Sign up</h1>
+    <form method="post">
+        {{ form.hidden_tag() }}
+        <div>
+            {{ form.username.label }}
+            {{ form.username(size=32, class="form-control", style="width:20%; margin: auto") }}
+            {% for error in form.username.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+            {% endfor %}
+        </div>
+        <div>
+            {{ form.password.label }}
+            {{ form.password(size=32, class="form-control", style="width:20%; margin: auto;") }}
+            {% for error in form.password.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+            {% endfor %}
+        </div>
+        <div>
+            {{ form.password2.label }}
+            {{ form.password2(size=32, class="form-control", style="width:20%; margin: auto;") }}
+            {% for error in form.password2.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+            {% endfor %}
+        </div>
+        <div>
+            {{ form.submit(class="btn btn-secondary", style="background-color: #808080; color:white; margin-top: 10px")}}
+        </div>
+    </form>
+</div>
+{% endblock %}

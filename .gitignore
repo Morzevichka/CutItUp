@@ -1,0 +1,5 @@
+__pycache__/
+
+app/model/data/videos/
+app/model/data/trimmed/
+app/model/data/models/
