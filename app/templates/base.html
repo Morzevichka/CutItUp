@@ -11,6 +11,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/video.js@7.10.2/dist/video-js.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/video.js@7.10.2/dist/video.js"></script>
   <style>
     #page_layout {
       height: 100vh;
@@ -119,23 +121,27 @@
     .flash-message {
       position: absolute;
       top: 10px;
-      left: 50%; 
-      transform: translateX(-50%);  
-      z-index: 1050;
+      left: 50%;
+      transform: translate(-100%, 0%);
       max-width: 90%;
       width: auto;
       padding: 15px 20px;
       background-color: rgba(0, 0, 0, 0.8);
       color: #ececec;
-      border-radius: 10px; 
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); 
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
       text-align: center;
       transition: opacity 1s ease-in-out;
       opacity: 1;
+      z-index: 9999;
     }
 
     .flash-message.hide {
       opacity: 0;
+    }
+
+    #side_bar:not(.hidden) + #page_body .flash-message {
+      margin-left: 250px;
     }
 
     .dropdown-menu {
@@ -299,6 +305,7 @@
         showSidebarBtn.addEventListener('click', () => {
         sidebar.classList.remove('hidden');
         pageBody.style.marginLeft = '250px';
+        
         showSidebarBtn.style.display = 'none';
         });
     

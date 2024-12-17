@@ -7,10 +7,15 @@ from config import Config
 
 app = Flask(__name__)
 app.config.from_object(Config)
+
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
+
 bootstrap = Bootstrap(app)
 login = LoginManager(app)
 
 from app import forms, routes
 from app.entity import app_user, chat, message
+
+from app.model import VideoTrimmer
+from app.model.media_processing import DataProcessor, AudioProcessing, VideoProcessing, Extractor, DataLoader

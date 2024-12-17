@@ -9,6 +9,9 @@ from app.entity.message import Message
 from flask import session
 from datetime import datetime
 import uuid
+import shutil
+import time
+from app.model.predictions import VideoTrimmer
 
 @app.route('/videos/<path:filepath>')
 def load_video(filepath):
@@ -55,12 +58,20 @@ def upload_video(chat_id=None):
         
         chat_video_folder = os.path.join(app.config['BASE_VIDEO_PATH'], 'chats', chat_id)
         os.makedirs(chat_video_folder, exist_ok=True)
+        file_path = os.path.join(chat_video_folder, filename)
 
-        video.save(os.path.join(chat_video_folder, filename))
+        video.save(file_path)
 
         message = Message(filename=filename, chat_id=chat_id, sender_type='user')
         db.session.add(message)
         db.session.commit()
+
+        video_names = VideoTrimmer().predict_trimmed(chat_id=chat_id, filename=filename, clips=3, rec_clip_duration=10)
+        for video in video_names:
+            message = Message(filename=video, chat_id=chat_id, sender_type='model')
+            db.session.add(message)
+        db.session.commit()
+
         flash('Video uploaded successfully', 'success') 
 
     else:
@@ -68,21 +79,31 @@ def upload_video(chat_id=None):
             chat_id = str(uuid.uuid4())
 
         videos_folder = app.config['BASE_VIDEO_PATH']
-        os.makedirs(videos_folder, exist_ok=True)
-        video.save(os.path.join(videos_folder, filename))
-        
-        chat_data = {'chat_id': chat_id, 'name': filename, 'user_id': None, 'messages': []}
-        chats = session.get('chats', [])
+        file_path = os.path.join(videos_folder, filename)
 
+        os.makedirs(videos_folder, exist_ok=True)
+        video.save(file_path)
+
+        video_names = VideoTrimmer().predict_trimmed(chat_id=None, filename=filename, clips=3, rec_clip_duration=10)
+
+        chat_data = {'chat_id': chat_id, 'name': filename, 'user_id': None, 'messages': []}
+
+        chats = session.get('chats', [])
         chat_found = False
         for chat in chats:
             if chat['chat_id'] == chat_id:
                 chat_found = True
-                chat['messages'].append({'filename': filename, 'timestamp': datetime.utcnow, 'sender_type': 'user'})
+                chat['messages'].append({'filename': filename, 'timestamp': datetime.utcnow(), 'sender_type': 'user'})
+                for video_name in video_names:
+                    message = {'filename': video_name, 'chat_id': chat_id, 'sender_type': 'model', 'timestamp': datetime.utcnow()}
+                    chat['messages'].append(message)
                 break
 
         if not chat_found:
-            chat_data['messages'].append({'filename': filename, 'timestamp': datetime.utcnow, 'sender_type': 'user'})
+            chat_data['messages'].append({'filename': filename, 'timestamp': datetime.utcnow(), 'sender_type': 'user'})
+            for video_name in video_names:
+                    message = {'filename': video_name, 'chat_id': chat_id, 'sender_type': 'model', 'timestamp': datetime.utcnow()}
+                    chat_data['messages'].append(message)
             chats.append(chat_data)
 
         session['chats'] = chats
@@ -94,6 +115,9 @@ def chat(chat_id):
     if current_user.is_authenticated:
         chats = Chat.query.filter_by(user_id=current_user.id).all()
         messages = Message.query.filter_by(chat_id=chat_id).order_by(Message.timestamp).all()
+
+        last_message = messages[-1] if messages else None
+        process_flag = True if last_message and last_message.sender_type == 'user' else False
     else:
         chats = session.get('chats', [])
         messages = []
@@ -102,7 +126,33 @@ def chat(chat_id):
                 messages = chat['messages']
                 break
 
-    return render_template('chat.html', chats=chats, chat_id=chat_id, messages=messages)
+        messages = sorted(messages, key=lambda m: m['timestamp'])
+
+        last_message = messages[-1] if messages else None
+        process_flag = True if last_message and last_message['sender_type'] == 'user' else False
+
+    return render_template('chat.html', chats=chats, chat_id=chat_id, messages=messages, process_flag=process_flag)
+
+@app.route('/process_video/<chat_id>/<filename>')
+def process_vide(chat_id, filename):
+    if current_user.is_authenticated:
+        video_names = VideoTrimmer().predict_trimmed(chat_id=chat_id, filename=filename, clips=3, rec_clip_duration=10)
+        for video in video_names:
+            message = Message(filename=video, chat_id=chat_id, sender_type='model')
+            db.session.add(message)
+        db.session.commit()
+    else:
+        video_names = VideoTrimmer().predict_trimmed(chat_id=None, filename=filename, clips=3, rec_clip_duration=10)
+        chats = session.get('chats', [])
+        for chat in chats:
+            if chat['chat_id'] == chat_id:
+                for video_name in video_names:
+                    message = {'filename': video_name, 'chat_id': chat_id, 'sender_type': 'model', 'timestamp': datetime.utcnow()}
+                    chat['messages'].append(message)
+                break
+
+        session['chats'] = chats
+    return redirect(url_for('chats'))
 
 @app.route('/search')
 def search():
@@ -120,7 +170,7 @@ def delete_chat(chat_id):
             flash(f'Chat hasn\'t found (maybe deleted)', 'danger')
             return redirect(url_for('index'))
         
-        os.remove(os.path.join(app.config['BASE_VIDEO_PATH'], 'chat', chat_id))
+
         db.session.delete(chat_to_delete)
         db.session.commit()
         flash('Chat has been deleted', 'success')
@@ -172,4 +222,9 @@ def login():
 def logout():
     logout_user()
     flash('You have logged out', 'warning')
+    return redirect(url_for('index'))
+
+@app.route('/clear_session')
+def clear_session():
+    session.clear()
     return redirect(url_for('index'))
