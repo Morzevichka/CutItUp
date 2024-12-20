@@ -1,6 +1,6 @@
 from app import app, db
 from app.forms import LoginForm, RegisterForm
-from flask import flash, redirect, request, url_for, render_template, send_from_directory, abort
+from flask import flash, redirect, request, url_for, render_template, send_from_directory, abort, jsonify
 from flask_login import current_user, login_user, logout_user
 import os
 from app.entity.app_user import AppUser
@@ -9,9 +9,39 @@ from app.entity.message import Message
 from flask import session
 from datetime import datetime
 import uuid
-import shutil
-import time
 from app.model.predictions import VideoTrimmer
+
+@app.route('/process_video', methods=['POST'])
+def process_video():
+    if request.is_json:
+        data = request.get_json()
+
+        chat_id = data.get('chat_id')
+        filename = data.get('filename')
+        num_clips = int(data.get('numClips', 1))
+        clip_duration = int(data.get('clipDuration', 10))
+    else:
+        return jsonify({"error": "Invalid content type"}), 400
+
+    print(chat_id, filename, num_clips, clip_duration)
+
+    if current_user.is_authenticated:
+        video_names = VideoTrimmer().predict_trimmed(chat_id=chat_id, filename=filename, clips=num_clips, rec_clip_duration=clip_duration)
+        for video in video_names:
+            message = Message(filename=video, chat_id=chat_id, sender_type='model')
+            db.session.add(message)
+        db.session.commit()
+    else:
+        video_names = VideoTrimmer().predict_trimmed(chat_id=chat_id, filename=filename, clips=num_clips, rec_clip_duration=clip_duration)
+        chats = session.get('chats', [])
+        for chat in chats:
+            if chat['chat_id'] == chat_id:
+                for video_name in video_names:
+                    message = {'filename': video_name, 'chat_id': chat_id, 'sender_type': 'model', 'timestamp': datetime.utcnow()}
+                    chat['messages'].append(message)
+                break
+        session['chats'] = chats
+    return jsonify({"success": True, "chat_id": chat_id})
 
 @app.route('/videos/<path:filepath>')
 def load_video(filepath):
@@ -30,9 +60,9 @@ def index():
         chats = Chat.query.filter_by(user_id=current_user.id).all()
     else:
         chats = session.get('chats', [])
-    return render_template("index.html", chats=chats)
+    return render_template('index.html', chats=chats)
 
-@app.route('/upload_video', methods=['POST'])
+@app.route('/upload_video/', methods=['POST'])
 @app.route('/upload_video/<chat_id>', methods=['POST'])
 def upload_video(chat_id=None):
     if 'video' not in request.files:
@@ -48,7 +78,7 @@ def upload_video(chat_id=None):
 
     if current_user.is_authenticated:
         if chat_id is None:
-             chat_id = str(uuid.uuid4())
+            chat_id = str(uuid.uuid4())
 
         chat = Chat.query.get(chat_id)
         if not chat:
@@ -66,12 +96,6 @@ def upload_video(chat_id=None):
         db.session.add(message)
         db.session.commit()
 
-        video_names = VideoTrimmer().predict_trimmed(chat_id=chat_id, filename=filename, clips=3, rec_clip_duration=10)
-        for video in video_names:
-            message = Message(filename=video, chat_id=chat_id, sender_type='model')
-            db.session.add(message)
-        db.session.commit()
-
         flash('Video uploaded successfully', 'success') 
 
     else:
@@ -84,8 +108,6 @@ def upload_video(chat_id=None):
         os.makedirs(videos_folder, exist_ok=True)
         video.save(file_path)
 
-        video_names = VideoTrimmer().predict_trimmed(chat_id=None, filename=filename, clips=3, rec_clip_duration=10)
-
         chat_data = {'chat_id': chat_id, 'name': filename, 'user_id': None, 'messages': []}
 
         chats = session.get('chats', [])
@@ -94,30 +116,26 @@ def upload_video(chat_id=None):
             if chat['chat_id'] == chat_id:
                 chat_found = True
                 chat['messages'].append({'filename': filename, 'timestamp': datetime.utcnow(), 'sender_type': 'user'})
-                for video_name in video_names:
-                    message = {'filename': video_name, 'chat_id': chat_id, 'sender_type': 'model', 'timestamp': datetime.utcnow()}
-                    chat['messages'].append(message)
                 break
 
         if not chat_found:
             chat_data['messages'].append({'filename': filename, 'timestamp': datetime.utcnow(), 'sender_type': 'user'})
-            for video_name in video_names:
-                    message = {'filename': video_name, 'chat_id': chat_id, 'sender_type': 'model', 'timestamp': datetime.utcnow()}
-                    chat_data['messages'].append(message)
             chats.append(chat_data)
 
         session['chats'] = chats
         flash('Video uploaded successfully', 'success')
-    return redirect(url_for('chat', chat_id=chat_id))
+
+    return jsonify({
+        'success': True,
+        'chat_id': chat_id,
+        'filename': filename
+    })
 
 @app.route('/c/<chat_id>', methods=['GET', 'POST'])
 def chat(chat_id):
     if current_user.is_authenticated:
         chats = Chat.query.filter_by(user_id=current_user.id).all()
         messages = Message.query.filter_by(chat_id=chat_id).order_by(Message.timestamp).all()
-
-        last_message = messages[-1] if messages else None
-        process_flag = True if last_message and last_message.sender_type == 'user' else False
     else:
         chats = session.get('chats', [])
         messages = []
@@ -128,31 +146,28 @@ def chat(chat_id):
 
         messages = sorted(messages, key=lambda m: m['timestamp'])
 
-        last_message = messages[-1] if messages else None
-        process_flag = True if last_message and last_message['sender_type'] == 'user' else False
+    return render_template('chat.html', chats=chats, chat_id=chat_id, messages=messages)
 
-    return render_template('chat.html', chats=chats, chat_id=chat_id, messages=messages, process_flag=process_flag)
-
-@app.route('/process_video/<chat_id>/<filename>')
-def process_vide(chat_id, filename):
+@app.route('/get_latest_messages/<chat_id>')
+def get_latest_messages(chat_id):
     if current_user.is_authenticated:
-        video_names = VideoTrimmer().predict_trimmed(chat_id=chat_id, filename=filename, clips=3, rec_clip_duration=10)
-        for video in video_names:
-            message = Message(filename=video, chat_id=chat_id, sender_type='model')
-            db.session.add(message)
-        db.session.commit()
+        message = Message.query.filter_by(chat_id=chat_id).order_by(Message.timestamp.desc()).first()
+        if message and message.sender_type == 'model':
+            return jsonify({'messagesUpdated': True})
     else:
-        video_names = VideoTrimmer().predict_trimmed(chat_id=None, filename=filename, clips=3, rec_clip_duration=10)
         chats = session.get('chats', [])
+        messages = []
+        
         for chat in chats:
             if chat['chat_id'] == chat_id:
-                for video_name in video_names:
-                    message = {'filename': video_name, 'chat_id': chat_id, 'sender_type': 'model', 'timestamp': datetime.utcnow()}
-                    chat['messages'].append(message)
+                messages = chat['messages']
                 break
+        
+        last_message = messages[-1] if messages else None
+        if last_message and last_message['sender_type'] == 'model':
+            return jsonify({'messagesUpdated': True})
 
-        session['chats'] = chats
-    return redirect(url_for('chats'))
+    return jsonify({'messagesUpdated': False})
 
 @app.route('/search')
 def search():

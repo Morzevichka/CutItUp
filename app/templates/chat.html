@@ -33,7 +33,9 @@
                 <label for="videoUpload" class="btn btn-light">
                     <i class="fas fa-upload"></i> Choose File
                 </label>
-                <input type="file" id="videoUpload" name="video" class="form-control" accept="video/*" onchange="openModal()" style="display: none;">
+                <input type="hidden" id="clipDurationHidden" name="clipDuration">
+                <input type="hidden" id="numClipsHidden" name="numClips">
+                <input type="file" id="videoUpload" name="video" class="form-control" accept="video/*" onchange="openModal()" style="display    : none;">
             </form>
         </div>
     </div>
@@ -43,6 +45,16 @@
     <div class="modal-content">
         <h3>Confirm Your Video</h3>
         <video id="modalVideoPlayer" width="100%" controls style="border-radius: 10px;"></video>
+        <div class="d-flex justify-content-between mt-3">
+            <div style="width: 48%;">
+                <label for="numClips" class="form-label">Number of Clips</label>
+                <input type="number" id="numClips" name="numClips" class="form-control form-control-custom" placeholder="Enter number of clips">
+            </div>
+            <div style="width: 48%;">
+                <label for="clipDuration" class="form-label">Required Duration (seconds)</label>
+                <input type="number" id="clipDuration" name="clipDuration" class="form-control form-control-custom" placeholder="Enter required duration">
+            </div>
+        </div>
         <div class="button-group d-flex justify-content-between mt-3">
             <button id="confirmButton" class="btn btn-success" onclick="submitForm()">Confirm</button>
             <button id="cancelButton" class="btn btn-danger" onclick="closeModal()">Cancel</button>
@@ -176,24 +188,24 @@
         justify-content: space-between;
         gap: 10px;
     }
+
+    .form-control-custom {
+        background-color: #171717;
+        color: #ececec;
+        border: 1px solid #424242;
+        border-radius: 5px;
+    }
+
+    .form-control-custom:focus {
+        background-color: #292929;
+        color: #ececec;
+        border: 1px solid #b4b4b4;
+    }
 </style>
 {% endblock %}
 
 {% block scripts %}
 <script>
-    window.onload = function() {
-        var processFlag = JSON.parse('{{ process_flag | tojson }}');
-        
-        if (processFlag) {
-            fetch('/process_video/{{ chat_id }}/{{ filename }}')
-                .then(response => response.json())
-                .then(data => {
-                    console.log(data);
-                })
-                .catch(error => console.error('Error:', error));
-        }
-    }
-
     document.addEventListener("DOMContentLoaded", function () {
         const chooseFileButton = document.querySelector('label[for="videoUpload"]');
 
@@ -202,7 +214,6 @@
             if (messages.length > 0) {
                 const lastMessage = messages[messages.length - 1];
                 const isUserSender = lastMessage.getAttribute("style")?.includes("justify-self: right");
-
                 if (isUserSender) {
                     blockChooseFileButton();
                 } else {
@@ -217,15 +228,37 @@
             chooseFileButton.style.pointerEvents = "none";
             chooseFileButton.style.opacity = "0.6";
             chooseFileButton.textContent = "Waiting for response...";
+
+            isChooseFileButtonBlocked = true;
         }
 
         function unblockChooseFileButton() {
             chooseFileButton.style.pointerEvents = "auto";
             chooseFileButton.style.opacity = "1";
             chooseFileButton.textContent = "Choose File";
+
+            isChooseFileButtonBlocked = false;
         }
         
-        checkSenderType();
+        checkSenderType();  
+
+        setInterval(checkMessages, 5000);
+
+        async function checkMessages() {
+            if (!isChooseFileButtonBlocked) {
+                return;
+            }
+            try {
+                const response = await fetch(`/get_latest_messages/{{ chat_id }}`);
+                const data = await response.json();
+
+                if (data.messagesUpdated) {
+                    location.reload();
+                }
+            } catch (error) {
+                console.error("Error checking messages:", error);
+            }
+        }
     });
 
     function openModal() {
@@ -247,8 +280,43 @@
         document.getElementById("videoUpload").value = "";
     }
 
-    function submitForm() {
-        document.getElementById("videoForm").submit();
+    async function submitForm(event) {
+        if (event) event.preventDefault();
+
+        const numClips = document.getElementById("numClips").value;
+        const clipDuration = document.getElementById("clipDuration").value;
+        const videoFile = document.getElementById("videoUpload").files[0];
+
+        const formDataUpload = new FormData();
+        formDataUpload.append("video", videoFile);
+
+        const uploadResponse = await fetch('/upload_video/{{ chat_id }}', {
+            method: "POST",
+            body: formDataUpload,
+        });
+
+        const uploadData = await uploadResponse.json();
+
+        const { chat_id, filename } = uploadData;
+
+        const processData = {
+            chat_id: chat_id,
+            filename: filename,
+            numClips: numClips,
+            clipDuration: clipDuration,
+        };
+
+        location.reload();
+
+        const processResponse = await fetch(`/process_video`, {
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(processData),
+        });
+
+        location.reload();
     }
 
     document.querySelectorAll('.video-js').forEach(function (videoElement) {

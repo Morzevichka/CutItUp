@@ -55,8 +55,7 @@ class VideoTrimmer:
         return np.array(sequences)
     
     def trim_video(self, video_path, intervals, num_clips, target_len=20):
-        intervals = intervals[:num_clips]
-
+        intervals = intervals[:num_clips] if len(intervals) > num_clips else intervals
         video_name = os.path.splitext(os.path.basename(video_path))[0]
         output_folder = os.path.dirname(video_path)
 
@@ -101,8 +100,6 @@ class VideoTrimmer:
             #         else:
             #             start -= abs(target_len - duration_clip) * 2/3
             #         end += (target_len - duration_clip) * 1/3
-
-            print(end, start)
             trimmed = video.subclip(start, end)
             video_names.append(f'{video_name}_{start:.2f}-{end:.2f}.mp4')
             output_path = os.path.join(output_folder, f'{video_name}_{start:.2f}-{end:.2f}.mp4')

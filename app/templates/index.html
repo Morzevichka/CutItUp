@@ -11,6 +11,8 @@
                 <label for="videoUpload" class="btn btn-light">
                     <i class="fas fa-upload"></i> Choose File
                 </label>
+                <input type="hidden" id="clipDurationHidden" name="clipDuration">
+                <input type="hidden" id="numClipsHidden" name="numClips">
                 <input type="file" id="videoUpload" name="video" class="form-control" accept="video/*" onchange="openModal()" style="display: none;">
             </form>
         </div>
@@ -21,6 +23,16 @@
     <div class="modal-content">
         <h3 class="modal-text">Confirm Your Video</h3>
         <video id="modalVideoPlayer" width="100%" controls style="border-radius: 10px; margin-top: 10px;"></video>
+        <div class="d-flex justify-content-between mt-3">
+            <div style="width: 48%;">
+                <label for="numClips" class="form-label">Number of Clips</label>
+                <input type="number" id="numClips" name="numClips" class="form-control form-control-custom" placeholder="Enter number of clips">
+            </div>
+            <div style="width: 48%;">
+                <label for="clipDuration" class="form-label">Required Duration (seconds)</label>
+                <input type="number" id="clipDuration" name="clipDuration" class="form-control form-control-custom" placeholder="Enter required duration">
+            </div>
+        </div>
         <div class="button-group d-flex justify-content-between mt-3">
             <button id="confirmButton" class="btn btn-success" onclick="submitForm()">Confirm</button>
             <button id="cancelButton" class="btn btn-danger" onclick="closeModal()">Cancel</button>
@@ -112,10 +124,24 @@
         justify-content: space-between;
         gap: 10px;
     }
+
+    .form-control-custom {
+        background-color: #171717;
+        color: #ececec;
+        border: 1px solid #424242;
+        border-radius: 5px;
+    }
+
+    .form-control-custom:focus {
+        background-color: #292929;
+        color: #ececec;
+        border: 1px solid #b4b4b4;
+    }
 </style>
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/main.js?v=1.0.1"></script>
 <script>
     function openModal() {
         var file = document.getElementById("videoUpload").files[0];
@@ -138,8 +164,53 @@
         document.getElementById("videoUpload").value = "";
     }
 
-    function submitForm() {
-        document.getElementById("videoForm").submit();
+    async function submitForm(event) {
+        if (event) event.preventDefault();
+
+        const numClips = document.getElementById("numClips").value;
+        const clipDuration = document.getElementById("clipDuration").value;
+        const videoFile = document.getElementById("videoUpload").files[0];
+
+        const formDataUpload = new FormData();
+        formDataUpload.append("video", videoFile);
+
+        try {
+            const uploadResponse = await fetch(`/upload_video`, {
+                method: "POST",
+                body: formDataUpload,
+            });
+
+            if (!uploadResponse.ok) {
+                throw new Error("Failed to upload video");
+            }
+
+            const uploadData = await uploadResponse.json();
+            if (!uploadData.success) {
+                throw new Error(uploadData.error || "Error during upload");
+            }
+
+            const { chat_id, filename } = uploadData;
+            
+            location.href = `/c/${chat_id}`;
+
+            const processData = {
+                chat_id: chat_id,
+                filename: filename,
+                numClips: numClips,
+                clipDuration: clipDuration,
+            };
+
+            const processResponse = await fetch('/process_video', {
+                method: "POST",
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(processData),
+            });
+
+        } catch (error) {
+            console.error("Error during video handling:", error);
+        }
     }
 </script>
 {% endblock %}
