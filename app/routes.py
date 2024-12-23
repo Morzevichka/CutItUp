@@ -32,7 +32,7 @@ def process_video():
             db.session.add(message)
         db.session.commit()
     else:
-        video_names = VideoTrimmer().predict_trimmed(chat_id=chat_id, filename=filename, clips=num_clips, rec_clip_duration=clip_duration)
+        video_names = VideoTrimmer().predict_trimmed(chat_id=None, filename=filename, clips=num_clips, rec_clip_duration=clip_duration)
         chats = session.get('chats', [])
         for chat in chats:
             if chat['chat_id'] == chat_id:

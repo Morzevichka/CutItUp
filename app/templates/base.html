@@ -24,16 +24,13 @@
 
     #page_body {
       width: 100%;
-      height: 100%;
+      height: 100vh;
       transition: margin-left 0.3s ease; 
       margin-left: 0;
     }
 
-    nav#side_bar {
-      height: 100vh;
+    aside#side_bar {
       width: 250px;
-      display: flex;
-      flex-flow: column;
       background-color: #171717;
       position: fixed;
       transform: translateX(0);
@@ -41,7 +38,7 @@
       transition: transform 0.3s ease, opacity 0.3s ease;
     }
 
-    nav#side_bar.hidden {
+    aside#side_bar.hidden {
       transform: translateX(-100%);
       opacity: 0;
     }
@@ -53,7 +50,7 @@
     }
 
     footer#bottom_links {
-      margin: auto 0 0 0;
+      margin-top: auto;
     }
 
     .alert {
@@ -72,7 +69,7 @@
       color: #ececec;
     }
 
-    nav#side_bar .btn {
+    aside#side_bar .btn {
       background-color: transparent !important;
       border: none;
       color: #ececec;
@@ -113,7 +110,7 @@
         display: block; 
       }
 
-      nav#side_bar.hidden {
+      aside#side_bar.hidden {
         display: none;
       }
     }
@@ -206,8 +203,8 @@
       <i class="fas fa-bars"></i>
     </button>
 
-    <nav id="side_bar">
-
+    <aside id="side_bar">
+      <nav class="d-flex flex-column" style="height: 100vh;">
         <header id="header_buttons" style="display: flex; justify-content: space-between; align-items: center; padding: 10px;">
           <button id="toggle_sidebar" class="btn btn-light">
             <i class="fas fa-bars"></i>
@@ -268,12 +265,12 @@
             {% endif %}
           </ul>
         </footer>
-
       </nav>
+    </aside>
 
 
   
-      <aside id="page_body">
+      <main id="page_body">
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
             {% for category, message in messages %}
@@ -284,7 +281,7 @@
           {% endif %}
         {% endwith %}
         {% block app_content %}{% endblock %}
-      </aside>
+      </main>
 
     </div>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
